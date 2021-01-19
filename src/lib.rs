@@ -1,3 +1,4 @@
+use chrono::prelude::*;
 use std::sync::atomic::*;
 
 #[repr(C)]
@@ -102,33 +103,69 @@ pub const TriggerState_TRIGGER_OFF: TriggerState = 2;
 pub type TriggerState = ::std::os::raw::c_uint;
 
 pub struct Monitor {
-    shmem: *const libc::c_void,
+    shmem: *const u8,
     shared_data_ptr: *const SharedData,
     trigger_data_ptr: *const TriggerData,
     video_store_data_ptr: *const VideoStoreData,
-    frame_count: isize,
+    image_size: usize,
+    frame_count: usize,
     timeval_ptr: *const libc::timeval,
-    frame_ptr: *const libc::c_void,
+    frame_ptr: *const u8,
 }
 
 impl Monitor {
-    pub fn from_mmap_and_size(shmem: *const libc::c_void, size: isize) -> Self {
+    pub fn from_mmap_and_size(shmem: *const u8, size: isize) -> Self {
         let shmem_end = shmem.wrapping_offset(size);
         let shared_data_ptr = shmem as *const SharedData;
         let image_size = unsafe {
-            (*shared_data_ptr).imagesize.load(std::sync::atomic::Ordering::SeqCst)
-        };
+            (*shared_data_ptr).imagesize.load(Ordering::SeqCst)
+        } as usize;
         let trigger_data_ptr = shared_data_ptr.wrapping_offset(1) as *const TriggerData;
         let video_store_data_ptr = trigger_data_ptr.wrapping_offset(1) as *const VideoStoreData;
-        let rest = video_store_data_ptr.wrapping_offset(1) as *const libc::c_void;
+        let rest = video_store_data_ptr.wrapping_offset(1) as *const u8;
         let rem = unsafe { shmem_end.offset_from(rest) };
-        let each_left = image_size as isize + std::mem::size_of::<libc::timeval>() as isize;
-        let frame_count = rem as isize / each_left;
+        let each_left = image_size + std::mem::size_of::<libc::timeval>();
+        let frame_count = rem as usize / each_left;
         let timeval_ptr = rest as *const libc::timeval;
-        let frame_ptr = timeval_ptr.wrapping_offset(frame_count) as *const libc::c_void;
+        let mut frame_ptr = timeval_ptr.wrapping_offset(frame_count as isize) as *const u8;
+        match frame_ptr.align_offset(64) {
+            0 => {},
+            n if n < 64 => frame_ptr = frame_ptr.wrapping_offset(n as isize),
+            n => panic!("weird align_offset? {}", n),
+        }
         Monitor {
             shmem, shared_data_ptr, trigger_data_ptr,
-            video_store_data_ptr, frame_count, timeval_ptr, frame_ptr,
+            video_store_data_ptr, image_size, frame_count, timeval_ptr, frame_ptr,
         }
     }
+
+    pub fn shared_data(&self) -> &SharedData {
+        unsafe { &*self.shared_data_ptr }
+    }
+    pub fn trigger_data(&self) -> &TriggerData {
+        unsafe { &*self.trigger_data_ptr }
+    }
+    pub fn video_store_data(&self) -> &VideoStoreData {
+        unsafe { &*self.video_store_data_ptr }
+    }
+    pub fn timevals(&self) -> &[libc::timeval] {
+        unsafe { std::slice::from_raw_parts(self.timeval_ptr, self.frame_count as usize) }
+    }
+    pub fn frame(&self, n: usize) -> Frame {
+        if n >= self.frame_count {
+            panic!("frame {} exceeds {}", n, self.frame_count)
+        }
+        let frame = self.frame_ptr.wrapping_offset((self.image_size * n) as isize);
+        let mut data = vec![0u8; self.image_size];
+        let frame_slice = unsafe { std::slice::from_raw_parts(frame as *const u8, self.image_size) };
+        data.copy_from_slice(frame_slice);
+        let when = self.timevals()[n];
+        let recorded_at = Utc.timestamp(when.tv_sec as i64, when.tv_usec as u32 * 1000);
+        Frame { recorded_at, data }
+    }
+}
+
+pub struct Frame {
+    pub recorded_at: DateTime<Utc>,
+    pub data: Vec<u8>,
 }

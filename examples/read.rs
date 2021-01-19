@@ -1,5 +1,6 @@
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::AsRawFd;
+use std::sync::atomic::Ordering;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let argv: Vec<_> = std::env::args().collect();
@@ -16,27 +17,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             0,
         )
     };
-    let shmem_end = shmem.wrapping_offset(meta.size() as isize);
-    println!("mapped {:?} {:?}", shmem, shmem_end);
-    let shared_data_ptr = shmem as *const zoneminder_shared_sys::SharedData;
-    let shared_data = unsafe { std::ptr::read_volatile(shared_data_ptr) };
-    println!("{:#?}", shared_data);
-    let trigger_data_ptr = shared_data_ptr.wrapping_offset(1) as *const zoneminder_shared_sys::TriggerData;
-    let trigger_data = unsafe { std::ptr::read_volatile(trigger_data_ptr) };
-    println!("{:#?}", trigger_data);
-    let video_store_data_ptr = trigger_data_ptr.wrapping_offset(1) as *const zoneminder_shared_sys::VideoStoreData;
-    let video_store_data = unsafe { std::ptr::read_volatile(video_store_data_ptr) };
-    println!("{:#?}", video_store_data);
-    let rest = video_store_data_ptr.wrapping_offset(1) as *const libc::c_void;
-    let rem = unsafe { shmem_end.offset_from(rest) };
-    let each_left = shared_data.imagesize.load(std::sync::atomic::Ordering::SeqCst) as usize + std::mem::size_of::<libc::timeval>();
-    let frame_count = rem as usize / each_left;
-    println!("{:?} {:?}", rest, (video_store_data_ptr as *const u8).wrapping_offset(std::mem::size_of::<zoneminder_shared_sys::VideoStoreData>() as isize));
-    println!("remainder {} each_left {} / {} % {}", rem, each_left, frame_count, rem as usize % each_left);
-    let mut timevals = vec![libc::timeval { tv_sec: 0, tv_usec: 0 }; frame_count];
-    unsafe {
-        std::ptr::copy_nonoverlapping(rest as *const libc::timeval, timevals.as_mut_ptr(), frame_count);
-    }
-    println!("timevals {:?}", timevals);
+
+    let m = zoneminder_shared_sys::Monitor::from_mmap_and_size(shmem as *const u8, meta.size() as isize);
+    let last_write = m.shared_data().last_write_index.load(Ordering::SeqCst) as usize;
+    let frame = m.frame(last_write);
+    let fname = format!("{}.jpg", frame.recorded_at.format("%S"));
+    println!("last frame {} {:?} {:?}", last_write, frame.recorded_at, fname);
+    let mut c = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_EXT_RGBA);
+    c.set_scan_optimization_mode(mozjpeg::ScanMode::AllComponentsTogether);
+    c.set_size(1920, 1080);
+    c.set_mem_dest();
+    c.start_compress();
+    assert!(c.write_scanlines(&frame.data[..]));
+    c.finish_compress();
+    let jpeg = c.data_to_vec().unwrap();
+    std::io::copy(
+        &mut &jpeg[..],
+        &mut std::fs::File::create(fname)?,
+    )?;
+    //println!("{:#?}", m.shared_data());
+    //println!("{:#?}", m.trigger_data());
+    //println!("{:#?}", m.video_store_data());
+    //println!("timevals {:#?}", m.timevals());
     Ok(())
 }
