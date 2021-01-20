@@ -1,24 +1,9 @@
-use std::os::unix::fs::MetadataExt;
-use std::os::unix::io::AsRawFd;
 use std::sync::atomic::Ordering;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let argv: Vec<_> = std::env::args().collect();
     let f = std::fs::File::open(&argv[1])?;
-    let meta = f.metadata()?;
-    println!("size {}", meta.size());
-    let shmem = unsafe {
-        libc::mmap(
-            std::ptr::null_mut(),
-            meta.size() as usize,
-            libc::PROT_READ,
-            libc::MAP_SHARED,
-            f.as_raw_fd(),
-            0,
-        )
-    };
-
-    let m = zoneminder_shared_sys::Monitor::from_mmap_and_size(shmem as *const u8, meta.size() as isize);
+    let m = zoneminder_shared_sys::Monitor::from_file(f)?;
     let last_write = m.shared_data().last_write_index.load(Ordering::SeqCst) as usize;
     let frame = m.frame(last_write);
     let fname = format!("{}.jpg", frame.recorded_at.format("%S"));
