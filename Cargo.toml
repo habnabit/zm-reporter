@@ -10,8 +10,3 @@ edition = "2018"
 chrono = "0.4.19"
 mozjpeg = "0.8.22"
 nix = "0.19.1"
-
-[dev-dependencies]
-
-[build-dependencies]
-bindgen = "0.56.0"

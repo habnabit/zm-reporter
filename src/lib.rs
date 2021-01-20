@@ -126,6 +126,7 @@ impl Monitor {
     pub fn video_store_data(&self) -> &VideoStoreData {
         unsafe { &*self.video_store_data_ptr }
     }
+    pub fn frame_count(&self) -> usize { self.frame_count }
     pub fn timevals(&self) -> &[TimeVal] {
         unsafe { std::slice::from_raw_parts(self.timeval_ptr, self.frame_count as usize) }
     }
