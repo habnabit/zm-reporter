@@ -114,6 +114,7 @@ impl Monitor {
         let rem = unsafe { shmem_end.offset_from(rest) };
         let each_left = image_size + std::mem::size_of::<TimeVal>();
         let frame_count = rem as usize / each_left;
+        debug_assert!(spec.buffer_image_count == frame_count);
         let timeval_ptr = rest as *const TimeVal;
         let mut frame_ptr = timeval_ptr.wrapping_offset(frame_count as isize) as *const u8;
         match frame_ptr.align_offset(64) {
