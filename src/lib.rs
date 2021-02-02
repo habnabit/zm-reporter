@@ -184,6 +184,7 @@ pub struct Frame {
 impl Frame {
     pub fn start_jpeg(&self) -> mozjpeg::Compress {
         let colorspace = match self.spec.colors {
+            1 => mozjpeg::ColorSpace::JCS_GRAYSCALE,
             3 => mozjpeg::ColorSpace::JCS_EXT_RGB,
             4 => mozjpeg::ColorSpace::JCS_EXT_RGBA,
             _ => panic!("weird monitor spec {:?}", self.spec),
