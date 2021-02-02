@@ -6,6 +6,12 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::*;
 
+mod env;
+mod mysql;
+pub use crate::env::load_env;
+use crate::env::env_lossy;
+pub use crate::mysql::{MonitorSpec, monitor_specs_from_mysql, mysql_connect};
+
 #[repr(C)]
 #[derive(Debug)]
 pub struct SharedData {
@@ -56,6 +62,7 @@ pub struct VideoStoreData {
 }
 
 pub struct Monitor {
+    spec: MonitorSpec,
     _file: File,
     map_size: usize,
     shmem: *const u8,
@@ -78,7 +85,13 @@ impl Drop for Monitor {
 }
 
 impl Monitor {
-    pub fn from_file(file: File) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_spec(spec: MonitorSpec) -> Result<Self, Box<dyn std::error::Error>> {
+        let path = format!("{}/zm.mmap.{}", env_lossy("ZM_PATH_MAP").unwrap(), spec.id);
+        let file = std::fs::File::open(path)?;
+        Self::from_file(spec, file)
+    }
+
+    fn from_file(spec: MonitorSpec, file: File) -> Result<Self, Box<dyn std::error::Error>> {
         let meta = file.metadata()?;
         let map_size = meta.size() as usize;
         let shmem = unsafe {
@@ -112,7 +125,7 @@ impl Monitor {
         }
         Ok(Monitor {
             _file: file,
-            map_size, shmem, shared_data_ptr, trigger_data_ptr,
+            spec, map_size, shmem, shared_data_ptr, trigger_data_ptr,
             video_store_data_ptr, image_size, frame_count, timeval_ptr, frame_ptr,
         })
     }
@@ -143,11 +156,25 @@ impl Monitor {
         data.copy_from_slice(frame_slice);
         let when = self.timevals()[n];
         let recorded_at = Utc.timestamp(when.tv_sec() as i64, when.tv_usec() as u32 * 1000);
-        Frame { recorded_at, data }
+        Frame { spec: self.spec, recorded_at, data }
     }
 }
 
 pub struct Frame {
+    pub spec: MonitorSpec,
     pub recorded_at: DateTime<Utc>,
     pub data: Vec<u8>,
+}
+
+impl Frame {
+    pub fn start_jpeg(&self) -> mozjpeg::Compress {
+        let colorspace = match self.spec.colors {
+            3 => mozjpeg::ColorSpace::JCS_EXT_RGB,
+            4 => mozjpeg::ColorSpace::JCS_EXT_RGBA,
+            _ => panic!("weird monitor spec {:?}", self.spec),
+        };
+        let mut c = mozjpeg::Compress::new(colorspace);
+        c.set_size(self.spec.width, self.spec.height);
+        c
+    }
 }

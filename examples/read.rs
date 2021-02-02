@@ -20,9 +20,8 @@ fn do_one(m: &zoneminder_shared_sys::Monitor) -> Result<bool, Box<dyn std::error
     }
     let fname_jpg = format!("{}.jpg", frame.recorded_at.format("%S"));
     println!("last frame {} {:?} {:?}", last_write, frame.recorded_at, fname_jpg);
-    let mut c = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_EXT_RGB);
+    let mut c = frame.start_jpeg();
     c.set_scan_optimization_mode(mozjpeg::ScanMode::AllComponentsTogether);
-    c.set_size(1920, 1080);
     c.set_mem_dest();
     c.start_compress();
     assert!(c.write_scanlines(&frame.data[..]));
@@ -37,8 +36,12 @@ fn do_one(m: &zoneminder_shared_sys::Monitor) -> Result<bool, Box<dyn std::error
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let argv: Vec<_> = std::env::args().collect();
-    let f = std::fs::File::open(&argv[1])?;
-    let m = zoneminder_shared_sys::Monitor::from_file(f)?;
+    let which: u32 = argv[1].parse()?;
+    zoneminder_shared_sys::load_env()?;
+    let mut conn = zoneminder_shared_sys::mysql_connect()?;
+    let specs = zoneminder_shared_sys::monitor_specs_from_mysql(&mut conn)?;
+    let (spec, status) = &specs[&which];
+    let m = zoneminder_shared_sys::Monitor::from_spec(*spec)?;
     let mut count = 0u64;
     loop {
         if !m.valid() {
