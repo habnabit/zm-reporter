@@ -5,17 +5,15 @@ pub(crate) fn env_lossy(key: &str) -> Option<String> {
 pub fn load_env() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::from_path("/etc/zm/zm.conf")?;
     let mut paths = std::fs::read_dir("/etc/zm/conf.d")?
-        .filter_map(|entry| {
-            match entry {
-                Ok(entry) => {
-                    let path = entry.path();
-                    match path.extension() {
-                        Some(ext) if ext == "conf" => Some(Ok(path)),
-                        _ => None,
-                    }
-                },
-                Err(e) => Some(Err(e)),
+        .filter_map(|entry| match entry {
+            Ok(entry) => {
+                let path = entry.path();
+                match path.extension() {
+                    Some(ext) if ext == "conf" => Some(Ok(path)),
+                    _ => None,
+                }
             }
+            Err(e) => Some(Err(e)),
         })
         .collect::<Result<Vec<_>, _>>()?;
     paths.sort();

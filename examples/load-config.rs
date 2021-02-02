@@ -24,24 +24,27 @@ pub struct MonitorSpec {
 impl FromRow for MonitorSpec {
     fn from_row_opt(row: mysql::Row) -> Result<Self, mysql::FromRowError> {
         let (id, width, height, colors) = <(u32, u32, u32, u32)>::from_row_opt(row)?;
-        Ok(Self { id, width, height, colors })
+        Ok(Self {
+            id,
+            width,
+            height,
+            colors,
+        })
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::from_path("/etc/zm/zm.conf")?;
     let mut paths = std::fs::read_dir("/etc/zm/conf.d")?
-        .filter_map(|entry| {
-            match entry {
-                Ok(entry) => {
-                    let path = entry.path();
-                    match path.extension() {
-                        Some(ext) if ext == "conf" => Some(Ok(path)),
-                        _ => None,
-                    }
-                },
-                Err(e) => Some(Err(e)),
+        .filter_map(|entry| match entry {
+            Ok(entry) => {
+                let path = entry.path();
+                match path.extension() {
+                    Some(ext) if ext == "conf" => Some(Ok(path)),
+                    _ => None,
+                }
             }
+            Err(e) => Some(Err(e)),
         })
         .collect::<Result<Vec<_>, _>>()?;
     paths.sort();
@@ -49,6 +52,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         dotenv::from_path(p)?;
     }
     let mut conn = mysql_connect()?;
-    println!("{:#?}", conn.query::<MonitorSpec, _>("select Id, Width, Height, Colours from Monitors")?);
+    println!(
+        "{:#?}",
+        conn.query::<MonitorSpec, _>("select Id, Width, Height, Colours from Monitors")?
+    );
     Ok(())
 }

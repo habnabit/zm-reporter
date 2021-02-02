@@ -1,10 +1,10 @@
 use std::sync::atomic::Ordering;
-use std::{time, thread};
+use std::{thread, time};
 
 fn do_one(m: &zoneminder_shared_sys::Monitor) -> Result<bool, Box<dyn std::error::Error>> {
     let state = m.shared_data().state.load(Ordering::SeqCst);
     if state == 0 || state == 4 {
-        return Ok(false)
+        return Ok(false);
     }
     let last_write = m.shared_data().last_write_index.load(Ordering::SeqCst) as usize;
     let frame = m.frame(last_write);
@@ -19,7 +19,10 @@ fn do_one(m: &zoneminder_shared_sys::Monitor) -> Result<bool, Box<dyn std::error
         write!(buf, "timevals\n{:#?}\n\n", m.timevals())?;
     }
     let fname_jpg = format!("{}.jpg", frame.recorded_at.format("%S"));
-    println!("last frame {} {:?} {:?}", last_write, frame.recorded_at, fname_jpg);
+    println!(
+        "last frame {} {:?} {:?}",
+        last_write, frame.recorded_at, fname_jpg
+    );
     let mut c = frame.start_jpeg();
     c.set_scan_optimization_mode(mozjpeg::ScanMode::AllComponentsTogether);
     c.set_mem_dest();
@@ -27,10 +30,7 @@ fn do_one(m: &zoneminder_shared_sys::Monitor) -> Result<bool, Box<dyn std::error
     assert!(c.write_scanlines(&frame.data[..]));
     c.finish_compress();
     let jpeg = c.data_to_vec().unwrap();
-    std::io::copy(
-        &mut &jpeg[..],
-        &mut std::fs::File::create(fname_jpg)?,
-    )?;
+    std::io::copy(&mut &jpeg[..], &mut std::fs::File::create(fname_jpg)?)?;
     Ok(true)
 }
 
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut count = 0u64;
     loop {
         if !m.valid() {
-            return Ok(())
+            return Ok(());
         }
         if do_one(&m)? {
             thread::sleep(time::Duration::from_millis(5_000));

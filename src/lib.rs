@@ -8,9 +8,9 @@ use std::sync::atomic::*;
 
 mod env;
 mod mysql;
-pub use crate::env::load_env;
 use crate::env::env_lossy;
-pub use crate::mysql::{MonitorSpec, monitor_specs_from_mysql, mysql_connect};
+pub use crate::env::load_env;
+pub use crate::mysql::{monitor_specs_from_mysql, mysql_connect, MonitorSpec};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -107,9 +107,7 @@ impl Monitor {
         let shmem_end = shmem.wrapping_offset(meta.size() as isize);
         debug_assert!(shmem_end > shmem);
         let shared_data_ptr = shmem as *const SharedData;
-        let image_size = unsafe {
-            (*shared_data_ptr).imagesize.load(Ordering::SeqCst)
-        } as usize;
+        let image_size = unsafe { (*shared_data_ptr).imagesize.load(Ordering::SeqCst) } as usize;
         let trigger_data_ptr = shared_data_ptr.wrapping_offset(1) as *const TriggerData;
         let video_store_data_ptr = trigger_data_ptr.wrapping_offset(1) as *const VideoStoreData;
         let rest = video_store_data_ptr.wrapping_offset(1) as *const u8;
@@ -119,14 +117,22 @@ impl Monitor {
         let timeval_ptr = rest as *const TimeVal;
         let mut frame_ptr = timeval_ptr.wrapping_offset(frame_count as isize) as *const u8;
         match frame_ptr.align_offset(64) {
-            0 => {},
+            0 => {}
             n if n < 64 => frame_ptr = frame_ptr.wrapping_offset(n as isize),
             n => panic!("weird align_offset? {}", n),
         }
         Ok(Monitor {
             _file: file,
-            spec, map_size, shmem, shared_data_ptr, trigger_data_ptr,
-            video_store_data_ptr, image_size, frame_count, timeval_ptr, frame_ptr,
+            spec,
+            map_size,
+            shmem,
+            shared_data_ptr,
+            trigger_data_ptr,
+            video_store_data_ptr,
+            image_size,
+            frame_count,
+            timeval_ptr,
+            frame_ptr,
         })
     }
 
@@ -142,7 +148,9 @@ impl Monitor {
     pub fn video_store_data(&self) -> &VideoStoreData {
         unsafe { &*self.video_store_data_ptr }
     }
-    pub fn frame_count(&self) -> usize { self.frame_count }
+    pub fn frame_count(&self) -> usize {
+        self.frame_count
+    }
     pub fn timevals(&self) -> &[TimeVal] {
         unsafe { std::slice::from_raw_parts(self.timeval_ptr, self.frame_count as usize) }
     }
@@ -150,13 +158,20 @@ impl Monitor {
         if n >= self.frame_count {
             panic!("frame {} exceeds {}", n, self.frame_count)
         }
-        let frame = self.frame_ptr.wrapping_offset((self.image_size * n) as isize);
+        let frame = self
+            .frame_ptr
+            .wrapping_offset((self.image_size * n) as isize);
         let mut data = vec![0u8; self.image_size];
-        let frame_slice = unsafe { std::slice::from_raw_parts(frame as *const u8, self.image_size) };
+        let frame_slice =
+            unsafe { std::slice::from_raw_parts(frame as *const u8, self.image_size) };
         data.copy_from_slice(frame_slice);
         let when = self.timevals()[n];
         let recorded_at = Utc.timestamp(when.tv_sec() as i64, when.tv_usec() as u32 * 1000);
-        Frame { spec: self.spec, recorded_at, data }
+        Frame {
+            spec: self.spec,
+            recorded_at,
+            data,
+        }
     }
 }
 
