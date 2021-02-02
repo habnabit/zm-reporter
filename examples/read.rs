@@ -76,6 +76,9 @@ impl Putter {
             .query(&[
                 ("name", &monitor_status.name),
             ])
+            .query(&[
+                ("recorded_at", format!("{}", frame.recorded_at.format("%+"))),
+            ])
             .send();
         println!("ran a PUT: {:#?}", r);
         Ok(())
