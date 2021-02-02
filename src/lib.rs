@@ -137,6 +137,9 @@ impl Monitor {
         })
     }
 
+    pub fn spec(&self) -> &MonitorSpec {
+        &self.spec
+    }
     pub fn valid(&self) -> bool {
         self.shared_data().size.load(Ordering::SeqCst) != 0
     }
