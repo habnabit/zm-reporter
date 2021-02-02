@@ -10,7 +10,7 @@ mod env;
 mod mysql;
 use crate::env::env_lossy;
 pub use crate::env::load_env;
-pub use crate::mysql::{monitor_specs_from_mysql, mysql_connect, MonitorSpec};
+pub use crate::mysql::{monitor_specs_from_mysql, mysql_connect, MonitorSpec, MonitorStatus};
 
 #[repr(C)]
 #[derive(Debug)]

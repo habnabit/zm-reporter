@@ -23,15 +23,16 @@ pub struct MonitorSpec {
 
 #[derive(Debug, Clone)]
 pub struct MonitorStatus {
+    pub name: String,
     pub status: String,
 }
 
 pub fn monitor_specs_from_mysql(
     conn: &mut mysql::Conn,
 ) -> Result<BTreeMap<u32, (MonitorSpec, MonitorStatus)>, Box<dyn std::error::Error>> {
-    let rows: Vec<(u32, usize, usize, u32, usize, String)> = conn.query(
+    let rows: Vec<(u32, usize, usize, u32, usize, String, String)> = conn.query(
         r"
-        select Id, Width, Height, Colours, ImageBufferCount, Status
+        select Id, Width, Height, Colours, ImageBufferCount, Name, Status
         from Monitors
         left join Monitor_Status on Id = MonitorId
         where Enabled
@@ -39,7 +40,7 @@ pub fn monitor_specs_from_mysql(
     )?;
     let ret = rows
         .into_iter()
-        .map(|(id, width, height, colors, buffer_image_count, status)| {
+        .map(|(id, width, height, colors, buffer_image_count, name, status)| {
             (
                 id,
                 (
@@ -50,7 +51,7 @@ pub fn monitor_specs_from_mysql(
                         colors,
                         buffer_image_count,
                     },
-                    MonitorStatus { status },
+                    MonitorStatus { name, status },
                 ),
             )
         })
