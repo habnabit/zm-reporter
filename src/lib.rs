@@ -117,6 +117,9 @@ impl Monitor {
         })
     }
 
+    pub fn valid(&self) -> bool {
+        self.shared_data().size.load(Ordering::SeqCst) != 0
+    }
     pub fn shared_data(&self) -> &SharedData {
         unsafe { &*self.shared_data_ptr }
     }
