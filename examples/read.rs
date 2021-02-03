@@ -81,6 +81,9 @@ impl Putter {
             ])
             .send();
         println!("ran a PUT: {:#?}", r);
+        if let Ok(resp) = r {
+            println!("body: {:?}", resp.text());
+        }
         Ok(())
     }
 }
